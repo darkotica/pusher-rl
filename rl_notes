@@ -1,0 +1,38 @@
+STA RADI TRENUTNO
+1. uspeo da nauci da gurne do cilja
+2. random pozicija cilindra, fiksirana pozicija cilja
+
+STA ZELIM DA MOZE DA URADI
+1. veci raspon mogucih pozicija cilindra (za sada je samo iznad/ispod cilja)
+	- probati istrenirati nov model na taj nacin
+	- probati dotrenirati model na taj nacin
+2. cilj da promeni mesto
+	- ovo je goal u ovoj prvoj fazi
+3. sledeca faza
+	- da ga gura kroz lavirint/zidove?
+	- ukljuciti neki cnn mozda za detekciju
+
+IDEJE
+1. razlicit learning ratio
+2. razlicita mreza
+3. razlicite tezine na rewards - one distance i to
+4. razliciti RL algoritmi
+5. razlicit broj steps
+
+21.08.
+- refaktor koda, train_v2
+- dodao eval callback, da svakih 10k timesteps uradi check modela
+
+
+# TODO proveri parametre env-a
+# 1. autoreset
+# 2. max number of steps - mozda povecati malko - mozda mu je tesko sa malim brojem steps
+# 3. promeni LR scheduler
+
+# sta znam
+# 1. prilikom treniranja na svakoj ep se resetuje pozicija objekta za pomeranje, cilj je isti
+# 2. povecavanje mreze ne pomaze nesto puno
+
+
+# probati
+# 1. nauciti ga da gurne kad krene sa istog mesta
