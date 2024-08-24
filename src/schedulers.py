@@ -24,14 +24,16 @@ def linear_schedule(initial_value):
     return func
 
 
-def cosine_schedule(start_lr, end_lr, total_timesteps):
-    # TODO istrazi ima restart neki
-    def func(cur_timestep):
+def cosine_schedule(start_lr, end_lr):
+
+    def func(progress):
         """
         Progress will decrease from 1 (beginning) to 0
         :param progress: (float)
         :return: (float)
         """
-        return end_lr + 0.5*(start_lr - end_lr)*(1 + math.cos(cur_timestep * math.pi/total_timesteps))
+        progress = 1 - progress
+        # progress = cur timestep / total timesteps
+        return end_lr + 0.5*(start_lr - end_lr)*(1 + math.cos(math.pi * progress))
 
     return func
