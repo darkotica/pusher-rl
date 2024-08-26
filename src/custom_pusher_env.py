@@ -31,7 +31,7 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
 
     def __init__(self, **kwargs):
         utils.EzPickle.__init__(self, **kwargs)
-        observation_space = Box(low=-np.inf, high=np.inf, shape=(25,), dtype=np.float64)
+        observation_space = Box(low=-np.inf, high=np.inf, shape=(23,), dtype=np.float64)
         model_file = kwargs.pop("model_file", "pusher.xml")
         MujocoEnv.__init__(
             self,
@@ -63,8 +63,8 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
         return (
             ob,
             reward,
-            False,
-            False,
+            reward_dist == 0, # znaci da je dist = 0
+            reward_dist == 0,
             dict(reward_dist=reward_dist, reward_ctrl=reward_ctrl),
         )
 
@@ -82,12 +82,18 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
         #     )
         #     if np.linalg.norm(self.cylinder_pos - self.goal_pos) > 0.17:
         #         break
-        self.goal_pos = np.asarray([
-            self.np_random.uniform(low=-0.4, high=0.4, size=1)[0], 
-            self.np_random.uniform(low=-0.9, high=0.9, size=1)[0]])
-        self.cylinder_pos = np.asarray([
-            self.np_random.uniform(low=-0.4, high=0.4, size=1)[0], 
-            self.np_random.uniform(low=-0.9, high=0.9, size=1)[0]])
+        self.goal_pos = np.asarray([0, 0])
+        while True:
+            # self.goal_pos = np.asarray([
+            #     self.np_random.uniform(low=-0.4, high=0.4, size=1)[0], 
+            #     self.np_random.uniform(low=-0.9, high=0.9, size=1)[0]])
+            self.cylinder_pos = np.asarray([
+                self.np_random.uniform(low=-0.3, high=0.3, size=1)[0], 
+                self.np_random.uniform(low=-0.5, high=0.5, size=1)[0]])
+            
+            # we don't want them to spawn too close
+            if np.linalg.norm(self.cylinder_pos - self.goal_pos) > 0.15:
+                break
 
         qpos[-4:-2] = self.cylinder_pos
         qpos[-2:] = self.goal_pos
@@ -101,8 +107,8 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
     def _get_obs(self):
         return np.concatenate(
             [
-                self.data.qpos.flat[:8],
-                self.data.qvel.flat[:8],
+                self.data.qpos.flat[:7],
+                self.data.qvel.flat[:7],
                 self.get_body_com("tips_arm"),
                 self.get_body_com("object"),
                 self.get_body_com("goal"),
@@ -112,7 +118,8 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
 
 def get_custom_pusher_env(max_number_of_steps=100, 
                           render_mode=None, 
-                          model_file="/home/darko-tica/Documents/pusher-rl/pusher-rl/src/custom_assets/pusher_custom.xml"):
+                          #model_file="/home/darko-tica/Documents/pusher-rl/pusher-rl/src/custom_assets/pusher_custom.xml"):
+                          model_file="/home/darko-tica/Documents/pusher-rl/pusher-rl/src/custom_assets/pusher_custom_center_arm.xml"):
     env = CustomPusherEnv(render_mode=render_mode, model_file=model_file)
 
     env = PassiveEnvChecker(env)
