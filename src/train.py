@@ -1,83 +1,73 @@
-import gymnasium as gym
-from stable_baselines3 import SAC, TD3, A2C, DDPG
 import os
-import argparse
-import torch 
+import sys
+import gymnasium as gym
+from stable_baselines3 import SAC
 from stable_baselines3.sac.policies import MlpPolicy
+from stable_baselines3.common.callbacks import EvalCallback, CallbackList, CheckpointCallback
+from stable_baselines3.common.monitor import Monitor
+from  stable_baselines3.common.noise import NormalActionNoise
+import numpy as np
+import json
 
-# Create directories to hold models and logs
-model_dir = "models"
-log_dir = "logs"
-os.makedirs(model_dir, exist_ok=True)
-os.makedirs(log_dir, exist_ok=True)
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-def train(rl_model, algo_name=""):
-    TIMESTEPS = 1000000
-    iters = 0
-    while True:
-        iters += 1
+from schedulers import linear_schedule, cosine_schedule
+from custom_pusher_env import get_custom_pusher_env, generate_test_positions
+import torch
 
-        rl_model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False)
-        rl_model.save(f"{model_dir}/{algo_name}_{TIMESTEPS*iters}")
+def get_callbacks(env, frequency, model_save_dir, log_save_dir):
+    eval_callback = EvalCallback(
+        env, 
+        best_model_save_path=model_save_dir,
+        log_path=log_save_dir, 
+        eval_freq=frequency,
+        deterministic=True, 
+        render=True)
 
-def test(env, rl_model):
-    obs = env.reset()[0]
-    done = False
-    extra_steps = 500
-    while True:
-        action, _ = rl_model.predict(obs)
-        obs, _, done, _, _ = env.step(action)
+    checkpoint_callback = CheckpointCallback(
+        save_freq=frequency,
+        save_path=model_save_dir,
+        name_prefix="rl_model",
+        verbose=2
+    )
 
-        if done:
-            extra_steps -= 1
+    cb_list = CallbackList([checkpoint_callback, eval_callback])
 
-            if extra_steps < 0:
-                break
-
-
-def linear_schedule(initial_value):
-    """
-    Linear learning rate schedule.
-
-    :param initial_value: (float or str)
-    :return: (function)
-    """
-    if isinstance(initial_value, str):
-        initial_value = float(initial_value)
-
-    def func(progress):
-        """
-        Progress will decrease from 1 (beginning) to 0
-        :param progress: (float)
-        :return: (float)
-        """
-        return progress * initial_value
-
-    return func
+    return cb_list
 
 
+base_dir = "train_res_fixed_goal_no_slide_center_arm_400_noise_moving_longer_timesteps"
 
-if __name__ == '__main__':
-    train_mode = True
+os.makedirs(base_dir, exist_ok=True)
 
-    # policy_kwargs = dict(activation_fn=torch.nn.ReLU, net_arch=[128, 128])
-    pusher_env = gym.make("Pusher-v4", render_mode="human")
 
-    if train_mode:
-        # rl_model = SAC('MlpPolicy', pusher_env, verbose=1, 
-        #                device='cuda', 
-        #                tensorboard_log=log_dir, 
-        #                learning_rate=linear_schedule(0.003),
-        #                #policy_kwargs=policy_kwargs
-        # )
-        rl_model = SAC(MlpPolicy, pusher_env, verbose=1, 
-                       device='cuda', 
-                       tensorboard_log=log_dir, 
-                       learning_rate=linear_schedule(0.001),
-                       #policy_kwargs=policy_kwargs
-        )
-        train(rl_model, "SAC")
-    else:
-        path_to_model = "models/SAC_2000000.zip"
-        rl_model = SAC.load(path_to_model, env=pusher_env)
-        test(pusher_env, rl_model)
+model_dir = f"{base_dir}/models"
+log_dir = f"{base_dir}/logs"
+
+TIMESTEPS = 4000000
+
+test_pos = generate_test_positions()
+
+with open(f"{base_dir}/test_pos.json", "w") as f:
+    json.dump(test_pos, f, indent=4)
+
+
+pusher_env_train = Monitor(get_custom_pusher_env(max_number_of_steps=400, render_mode="human", test_pos=test_pos), log_dir)
+pusher_env_eval = Monitor(get_custom_pusher_env(max_number_of_steps=400, test_pos=test_pos), log_dir)
+
+callbacks = get_callbacks(pusher_env_eval, 10000, model_dir, log_dir)
+
+policy_kwargs = dict(activation_fn=torch.nn.ReLU, net_arch=[512, 512])
+
+rl_model = SAC(
+    MlpPolicy, 
+    pusher_env_train, 
+    verbose=1, 
+    device='cuda', 
+    tensorboard_log=log_dir, 
+    learning_rate=cosine_schedule(0.0003, 0.000003),
+    policy_kwargs=policy_kwargs,
+    action_noise=NormalActionNoise(np.array(0), np.array(0.1))
+)
+
+rl_model.learn(total_timesteps=TIMESTEPS, callback=callbacks, reset_num_timesteps=True)

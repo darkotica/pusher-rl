@@ -33,6 +33,10 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
         utils.EzPickle.__init__(self, **kwargs)
         observation_space = Box(low=-np.inf, high=np.inf, shape=(23,), dtype=np.float64)
         model_file = kwargs.pop("model_file", "pusher.xml")
+        self.test_pos = kwargs.pop("test_pos")
+        self.test_mode = kwargs.pop("test_mode")
+        self.num_of_test_pos = len(self.test_pos)
+        self.current_idx_of_test_pos = 0
         MujocoEnv.__init__(
             self,
             model_file,
@@ -49,8 +53,14 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
         vec_2 = self.get_body_com("object") - self.get_body_com("goal")
 
         reward_near = -np.linalg.norm(vec_1)
-        reward_dist = -np.linalg.norm(vec_2)
+        dist = -np.linalg.norm(vec_2)
         reward_ctrl = -np.square(a).sum()
+
+        if abs(dist) < 0.1:
+            reward_dist = 10
+        else:
+            reward_dist = dist
+
         reward = reward_dist + 0.1 * reward_ctrl + 0.5 * reward_near
 
         # self.do_simulation(a, self.frame_skip)
@@ -63,37 +73,41 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
         return (
             ob,
             reward,
-            reward_dist == 0, # znaci da je dist = 0
-            reward_dist == 0,
+            abs(dist) < 0.1,
+            abs(dist) < 0.1,
             dict(reward_dist=reward_dist, reward_ctrl=reward_ctrl),
         )
 
     def reset_model(self):
         qpos = self.init_qpos
 
-        # self.goal_pos = np.asarray([0, 0])
-        # while True:
-        #     self.cylinder_pos = np.concatenate(
-        #         [
-        #             # cylinder can now be all around the goal
-        #             self.np_random.uniform(low=-0.3, high=0.3, size=1),
-        #             self.np_random.uniform(low=-0.3, high=0.3, size=1),
-        #         ]
-        #     )
-        #     if np.linalg.norm(self.cylinder_pos - self.goal_pos) > 0.17:
-        #         break
-        self.goal_pos = np.asarray([0, 0])
-        while True:
-            # self.goal_pos = np.asarray([
-            #     self.np_random.uniform(low=-0.4, high=0.4, size=1)[0], 
-            #     self.np_random.uniform(low=-0.9, high=0.9, size=1)[0]])
-            self.cylinder_pos = np.asarray([
-                self.np_random.uniform(low=-0.3, high=0.3, size=1)[0], 
-                self.np_random.uniform(low=-0.5, high=0.5, size=1)[0]])
-            
-            # we don't want them to spawn too close
-            if np.linalg.norm(self.cylinder_pos - self.goal_pos) > 0.15:
-                break
+        if not self.test_mode:
+            self.goal_pos = np.asarray([0, 0])
+            while True:
+                self.goal_pos = np.asarray([
+                    self.np_random.uniform(low=-0.3, high=0.3, size=1)[0], 
+                    self.np_random.uniform(low=-0.5, high=0.5, size=1)[0]])
+                self.cylinder_pos = np.asarray([
+                    self.np_random.uniform(low=-0.3, high=0.3, size=1)[0], 
+                    self.np_random.uniform(low=-0.5, high=0.5, size=1)[0]])
+                
+                # we don't want them to spawn too close
+                if np.linalg.norm(self.cylinder_pos - self.goal_pos) < 0.4:
+                    continue
+                
+                valid = True
+                for pos in self.test_pos:
+                    if (pos[0] == self.goal_pos).all() or (pos[1] == self.cylinder_pos).all():
+                        valid = False
+                        break
+
+                if valid:
+                    break
+        else:
+            cur_goal, cur_cylinder = self.test_pos[self.current_idx_of_test_pos]
+            self.goal_pos = np.array(cur_goal)
+            self.cylinder_pos = np.asarray(cur_cylinder)
+            self.current_idx_of_test_pos += 1
 
         qpos[-4:-2] = self.cylinder_pos
         qpos[-2:] = self.goal_pos
@@ -114,13 +128,50 @@ class CustomPusherEnv(MujocoEnv, utils.EzPickle):
                 self.get_body_com("goal"),
             ]
         )
+    
+
+def generate_test_positions(num_positions=60): # ovo stavi da bude otp area 
+    positions = []
+
+    min_y = -3
+    max_y = 3
+    min_x = -5
+    max_x = 5
+
+    width_x = max_x - min_x
+
+    for i in range(num_positions):
+        y_val = (i // width_x - max_y)/10
+        x_val = (i % width_x - max_x)/10
+
+
+        while True:
+            goal_pos = np.asarray([
+                np.random.uniform(low=y_val, high=y_val + 0.1, size=1)[0], 
+                np.random.uniform(low=x_val, high=x_val + 0.1, size=1)[0],
+                ])
+            cylinder_pos = np.asarray([
+                np.random.uniform(low=min_y/10, high=max_y/10, size=1)[0], 
+                np.random.uniform(low=min_x/10, high=max_x/10, size=1)[0],
+                ])
+            
+            # we don't want them to spawn too close
+            if np.linalg.norm(cylinder_pos - goal_pos) > 0.4:
+                break
+            
+        
+        positions.append((goal_pos.tolist(), cylinder_pos.tolist()))
+    
+    return positions
 
 
 def get_custom_pusher_env(max_number_of_steps=100, 
                           render_mode=None, 
+                          test_pos=[],
+                          test_mode=False,
                           #model_file="/home/darko-tica/Documents/pusher-rl/pusher-rl/src/custom_assets/pusher_custom.xml"):
                           model_file="/home/darko-tica/Documents/pusher-rl/pusher-rl/src/custom_assets/pusher_custom_center_arm.xml"):
-    env = CustomPusherEnv(render_mode=render_mode, model_file=model_file)
+    env = CustomPusherEnv(render_mode=render_mode, model_file=model_file, test_pos=test_pos, test_mode=test_mode)
 
     env = PassiveEnvChecker(env)
     env = OrderEnforcing(env)
