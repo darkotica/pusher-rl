@@ -11,7 +11,7 @@ import json
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from schedulers import linear_schedule, cosine_schedule
+from schedulers import linear_schedule, cosine_schedule, cosine_schedule_WR
 from custom_pusher_env import get_custom_pusher_env, generate_test_positions
 import torch
 
@@ -65,7 +65,7 @@ rl_model = SAC(
     verbose=1, 
     device='cuda', 
     tensorboard_log=log_dir, 
-    learning_rate=cosine_schedule(0.0003, 0.000003),
+    learning_rate=cosine_schedule_WR(0.0003, 100000, TIMESTEPS, m_mul=0.9, alpha=0.01),
     policy_kwargs=policy_kwargs,
     action_noise=NormalActionNoise(np.array(0), np.array(0.1))
 )
