@@ -36,8 +36,8 @@ def test(env, rl_model, num_steps, num_test_pos):
     return len(tests_solved), len(tests_failed)
 
 
-base_dir = "train_res_fixed_goal_no_slide_center_arm_400_noise_moving_longer_timesteps"
-best_model_path = f"{base_dir}/models/best_model.zip"
+base_dir = "src/best_model"
+best_model_path = f"{base_dir}/best_model.zip"
 
 test_pos_path = f"{base_dir}/test_pos.json"
 
